@@ -89,7 +89,7 @@ class DetLocalVisualizer(Visualizer):
         text_color: Optional[Union[str, Tuple[int]]] = (200, 200, 200),
         mask_color: Optional[Union[str, Tuple[int]]] = None,
         line_width: Union[int, float] = 3,
-        alpha: float = 0.8,
+        alpha: float = 0.5,
     ) -> None:
         super().__init__(
             name=name, image=image, vis_backends=vis_backends, save_dir=save_dir
@@ -187,7 +187,8 @@ class DetLocalVisualizer(Visualizer):
             max_label = int(max(labels) if len(labels) > 0 else 0)
             mask_color = palette if self.mask_color is None else self.mask_color
             mask_palette = get_palette(mask_color, max_label + 1)
-            colors = [jitter_color(mask_palette[label]) for label in labels]
+            colors = [mask_palette[label] for label in labels]
+            # colors = [jitter_color(mask_palette[label]) for label in labels]
             text_palette = get_palette(self.text_color, max_label + 1)
             text_colors = [text_palette[label] for label in labels]
 
