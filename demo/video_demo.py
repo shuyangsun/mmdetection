@@ -16,6 +16,7 @@ def parse_args():
     parser.add_argument("config", help="Config file")
     parser.add_argument("checkpoint", help="Checkpoint file")
     parser.add_argument("--device", default="cuda:0", help="Device used for inference")
+    parser.add_argument("--fps", type=float, default=0, help="Bbox score threshold")
     parser.add_argument(
         "--score-thr", type=float, default=0.3, help="Bbox score threshold"
     )
@@ -53,12 +54,15 @@ def main():
 
     video_reader = mmcv.VideoReader(args.video)
     video_writer = None
+    fps: float = video_reader.fps
+    if args.fps > 0:
+        fps = args.fps
     if args.out:
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         video_writer = cv2.VideoWriter(
             args.out,
             fourcc,
-            video_reader.fps,
+            fps,
             (video_reader.width, video_reader.height),
         )
 
