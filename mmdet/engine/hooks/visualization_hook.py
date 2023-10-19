@@ -47,14 +47,16 @@ class DetVisualizationHook(Hook):
             corresponding backend. Defaults to None.
     """
 
-    def __init__(self,
-                 draw: bool = False,
-                 interval: int = 50,
-                 score_thr: float = 0.3,
-                 show: bool = False,
-                 wait_time: float = 0.,
-                 test_out_dir: Optional[str] = None,
-                 backend_args: dict = None):
+    def __init__(
+        self,
+        draw: bool = False,
+        interval: int = 50,
+        score_thr: float = 0.3,
+        show: bool = False,
+        wait_time: float = 0.0,
+        test_out_dir: Optional[str] = None,
+        backend_args: dict = None,
+    ):
         self._visualizer: Visualizer = Visualizer.get_current_instance()
         self.interval = interval
         self.score_thr = score_thr
@@ -62,10 +64,12 @@ class DetVisualizationHook(Hook):
         if self.show:
             # No need to think about vis backends.
             self._visualizer._vis_backends = {}
-            warnings.warn('The show is True, it means that only '
-                          'the prediction results are visualized '
-                          'without storing data, so vis_backends '
-                          'needs to be excluded.')
+            warnings.warn(
+                "The show is True, it means that only "
+                "the prediction results are visualized "
+                "without storing data, so vis_backends "
+                "needs to be excluded."
+            )
 
         self.wait_time = wait_time
         self.backend_args = backend_args
@@ -73,8 +77,13 @@ class DetVisualizationHook(Hook):
         self.test_out_dir = test_out_dir
         self._test_index = 0
 
-    def after_val_iter(self, runner: Runner, batch_idx: int, data_batch: dict,
-                       outputs: Sequence[DetDataSample]) -> None:
+    def after_val_iter(
+        self,
+        runner: Runner,
+        batch_idx: int,
+        data_batch: dict,
+        outputs: Sequence[DetDataSample],
+    ) -> None:
         """Run after every ``self.interval`` validation iterations.
 
         Args:
@@ -94,20 +103,26 @@ class DetVisualizationHook(Hook):
         # Visualize only the first data
         img_path = outputs[0].img_path
         img_bytes = get(img_path, backend_args=self.backend_args)
-        img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+        img = mmcv.imfrombytes(img_bytes, channel_order="rgb")
 
         if total_curr_iter % self.interval == 0:
             self._visualizer.add_datasample(
-                osp.basename(img_path) if self.show else 'val_img',
+                osp.basename(img_path) if self.show else "val_img",
                 img,
                 data_sample=outputs[0],
                 show=self.show,
                 wait_time=self.wait_time,
                 pred_score_thr=self.score_thr,
-                step=total_curr_iter)
+                step=total_curr_iter,
+            )
 
-    def after_test_iter(self, runner: Runner, batch_idx: int, data_batch: dict,
-                        outputs: Sequence[DetDataSample]) -> None:
+    def after_test_iter(
+        self,
+        runner: Runner,
+        batch_idx: int,
+        data_batch: dict,
+        outputs: Sequence[DetDataSample],
+    ) -> None:
         """Run after every testing iterations.
 
         Args:
@@ -121,8 +136,9 @@ class DetVisualizationHook(Hook):
             return
 
         if self.test_out_dir is not None:
-            self.test_out_dir = osp.join(runner.work_dir, runner.timestamp,
-                                         self.test_out_dir)
+            self.test_out_dir = osp.join(
+                runner.work_dir, runner.timestamp, self.test_out_dir
+            )
             mkdir_or_exist(self.test_out_dir)
 
         for data_sample in outputs:
@@ -130,7 +146,7 @@ class DetVisualizationHook(Hook):
 
             img_path = data_sample.img_path
             img_bytes = get(img_path, backend_args=self.backend_args)
-            img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+            img = mmcv.imfrombytes(img_bytes, channel_order="rgb")
 
             out_file = None
             if self.test_out_dir is not None:
@@ -138,14 +154,15 @@ class DetVisualizationHook(Hook):
                 out_file = osp.join(self.test_out_dir, out_file)
 
             self._visualizer.add_datasample(
-                osp.basename(img_path) if self.show else 'test_img',
+                osp.basename(img_path) if self.show else "test_img",
                 img,
                 data_sample=data_sample,
                 show=self.show,
                 wait_time=self.wait_time,
                 pred_score_thr=self.score_thr,
                 out_file=out_file,
-                step=self._test_index)
+                step=self._test_index,
+            )
 
 
 @HOOKS.register_module()
@@ -180,14 +197,16 @@ class TrackVisualizationHook(Hook):
             Defaults to ``None``.
     """
 
-    def __init__(self,
-                 draw: bool = False,
-                 frame_interval: int = 30,
-                 score_thr: float = 0.3,
-                 show: bool = False,
-                 wait_time: float = 0.,
-                 test_out_dir: Optional[str] = None,
-                 backend_args: dict = None) -> None:
+    def __init__(
+        self,
+        draw: bool = False,
+        frame_interval: int = 30,
+        score_thr: float = 0.3,
+        show: bool = False,
+        wait_time: float = 0.0,
+        test_out_dir: Optional[str] = None,
+        backend_args: dict = None,
+    ) -> None:
         self._visualizer: Visualizer = Visualizer.get_current_instance()
         self.frame_interval = frame_interval
         self.score_thr = score_thr
@@ -195,10 +214,12 @@ class TrackVisualizationHook(Hook):
         if self.show:
             # No need to think about vis backends.
             self._visualizer._vis_backends = {}
-            warnings.warn('The show is True, it means that only '
-                          'the prediction results are visualized '
-                          'without storing data, so vis_backends '
-                          'needs to be excluded.')
+            warnings.warn(
+                "The show is True, it means that only "
+                "the prediction results are visualized "
+                "without storing data, so vis_backends "
+                "needs to be excluded."
+            )
 
         self.wait_time = wait_time
         self.backend_args = backend_args
@@ -206,8 +227,13 @@ class TrackVisualizationHook(Hook):
         self.test_out_dir = test_out_dir
         self.image_idx = 0
 
-    def after_val_iter(self, runner: Runner, batch_idx: int, data_batch: dict,
-                       outputs: Sequence[TrackDataSample]) -> None:
+    def after_val_iter(
+        self,
+        runner: Runner,
+        batch_idx: int,
+        data_batch: dict,
+        outputs: Sequence[TrackDataSample],
+    ) -> None:
         """Run after every ``self.interval`` validation iteration.
 
         Args:
@@ -219,16 +245,14 @@ class TrackVisualizationHook(Hook):
         if self.draw is False:
             return
 
-        assert len(outputs) == 1,\
-            'only batch_size=1 is supported while validating.'
+        assert len(outputs) == 1, "only batch_size=1 is supported while validating."
 
         sampler = runner.val_dataloader.sampler
         if isinstance(sampler, TrackImgSampler):
             if self.every_n_inner_iters(batch_idx, self.frame_interval):
                 total_curr_iter = runner.iter + batch_idx
                 track_data_sample = outputs[0]
-                self.visualize_single_image(track_data_sample[0],
-                                            total_curr_iter)
+                self.visualize_single_image(track_data_sample[0], total_curr_iter)
         else:
             # video visualization DefaultSampler
             if self.every_n_inner_iters(batch_idx, 1):
@@ -237,15 +261,18 @@ class TrackVisualizationHook(Hook):
 
                 for frame_id in range(video_length):
                     if frame_id % self.frame_interval == 0:
-                        total_curr_iter = runner.iter + self.image_idx + \
-                                          frame_id
+                        total_curr_iter = runner.iter + self.image_idx + frame_id
                         img_data_sample = track_data_sample[frame_id]
-                        self.visualize_single_image(img_data_sample,
-                                                    total_curr_iter)
+                        self.visualize_single_image(img_data_sample, total_curr_iter)
                 self.image_idx = self.image_idx + video_length
 
-    def after_test_iter(self, runner: Runner, batch_idx: int, data_batch: dict,
-                        outputs: Sequence[TrackDataSample]) -> None:
+    def after_test_iter(
+        self,
+        runner: Runner,
+        batch_idx: int,
+        data_batch: dict,
+        outputs: Sequence[TrackDataSample],
+    ) -> None:
         """Run after every testing iteration.
 
         Args:
@@ -257,12 +284,12 @@ class TrackVisualizationHook(Hook):
         if self.draw is False:
             return
 
-        assert len(outputs) == 1, \
-            'only batch_size=1 is supported while testing.'
+        assert len(outputs) == 1, "only batch_size=1 is supported while testing."
 
         if self.test_out_dir is not None:
-            self.test_out_dir = osp.join(runner.work_dir, runner.timestamp,
-                                         self.test_out_dir)
+            self.test_out_dir = osp.join(
+                runner.work_dir, runner.timestamp, self.test_out_dir
+            )
             mkdir_or_exist(self.test_out_dir)
 
         sampler = runner.test_dataloader.sampler
@@ -279,12 +306,12 @@ class TrackVisualizationHook(Hook):
                 for frame_id in range(video_length):
                     if frame_id % self.frame_interval == 0:
                         img_data_sample = track_data_sample[frame_id]
-                        self.visualize_single_image(img_data_sample,
-                                                    self.image_idx + frame_id)
+                        self.visualize_single_image(
+                            img_data_sample, self.image_idx + frame_id
+                        )
                 self.image_idx = self.image_idx + video_length
 
-    def visualize_single_image(self, img_data_sample: DetDataSample,
-                               step: int) -> None:
+    def visualize_single_image(self, img_data_sample: DetDataSample, step: int) -> None:
         """
         Args:
             img_data_sample (DetDataSample): single image output.
@@ -292,21 +319,21 @@ class TrackVisualizationHook(Hook):
         """
         img_path = img_data_sample.img_path
         img_bytes = get(img_path, backend_args=self.backend_args)
-        img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+        img = mmcv.imfrombytes(img_bytes, channel_order="rgb")
 
         out_file = None
         if self.test_out_dir is not None:
-            video_name = img_path.split('/')[-3]
+            video_name = img_path.split("/")[-3]
             mkdir_or_exist(osp.join(self.test_out_dir, video_name))
-            out_file = osp.join(self.test_out_dir, video_name,
-                                osp.basename(img_path))
+            out_file = osp.join(self.test_out_dir, video_name, osp.basename(img_path))
 
         self._visualizer.add_datasample(
-            osp.basename(img_path) if self.show else 'test_img',
+            osp.basename(img_path) if self.show else "test_img",
             img,
             data_sample=img_data_sample,
             show=self.show,
             wait_time=self.wait_time,
             pred_score_thr=self.score_thr,
             out_file=out_file,
-            step=step)
+            step=step,
+        )

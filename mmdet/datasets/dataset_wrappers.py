@@ -33,29 +33,30 @@ class MultiImageMixDataset:
             iteration is terminated and raise the error. Default: 15.
     """
 
-    def __init__(self,
-                 dataset: Union[BaseDataset, dict],
-                 pipeline: Sequence[str],
-                 skip_type_keys: Union[Sequence[str], None] = None,
-                 max_refetch: int = 15,
-                 lazy_init: bool = False) -> None:
+    def __init__(
+        self,
+        dataset: Union[BaseDataset, dict],
+        pipeline: Sequence[str],
+        skip_type_keys: Union[Sequence[str], None] = None,
+        max_refetch: int = 15,
+        lazy_init: bool = False,
+    ) -> None:
         assert isinstance(pipeline, collections.abc.Sequence)
         if skip_type_keys is not None:
-            assert all([
-                isinstance(skip_type_key, str)
-                for skip_type_key in skip_type_keys
-            ])
+            assert all(
+                [isinstance(skip_type_key, str) for skip_type_key in skip_type_keys]
+            )
         self._skip_type_keys = skip_type_keys
 
         self.pipeline = []
         self.pipeline_types = []
         for transform in pipeline:
             if isinstance(transform, dict):
-                self.pipeline_types.append(transform['type'])
+                self.pipeline_types.append(transform["type"])
                 transform = TRANSFORMS.build(transform)
                 self.pipeline.append(transform)
             else:
-                raise TypeError('pipeline must be a dict')
+                raise TypeError("pipeline must be a dict")
 
         self.dataset: BaseDataset
         if isinstance(dataset, dict):
@@ -64,11 +65,12 @@ class MultiImageMixDataset:
             self.dataset = dataset
         else:
             raise TypeError(
-                'elements in datasets sequence should be config or '
-                f'`BaseDataset` instance, but got {type(dataset)}')
+                "elements in datasets sequence should be config or "
+                f"`BaseDataset` instance, but got {type(dataset)}"
+            )
 
         self._metainfo = self.dataset.metainfo
-        if hasattr(self.dataset, 'flag'):
+        if hasattr(self.dataset, "flag"):
             self.flag = self.dataset.flag
         self.num_samples = len(self.dataset)
         self.max_refetch = max_refetch
@@ -113,13 +115,14 @@ class MultiImageMixDataset:
 
     def __getitem__(self, idx):
         results = copy.deepcopy(self.dataset[idx])
-        for (transform, transform_type) in zip(self.pipeline,
-                                               self.pipeline_types):
-            if self._skip_type_keys is not None and \
-                    transform_type in self._skip_type_keys:
+        for transform, transform_type in zip(self.pipeline, self.pipeline_types):
+            if (
+                self._skip_type_keys is not None
+                and transform_type in self._skip_type_keys
+            ):
                 continue
 
-            if hasattr(transform, 'get_indexes'):
+            if hasattr(transform, "get_indexes"):
                 for i in range(self.max_refetch):
                     # Make sure the results passed the loading pipeline
                     # of the original dataset is not None.
@@ -130,13 +133,14 @@ class MultiImageMixDataset:
                         copy.deepcopy(self.dataset[index]) for index in indexes
                     ]
                     if None not in mix_results:
-                        results['mix_results'] = mix_results
+                        results["mix_results"] = mix_results
                         break
                 else:
                     raise RuntimeError(
-                        'The loading pipeline of the original dataset'
-                        ' always return None. Please check the correctness '
-                        'of the dataset and its pipeline.')
+                        "The loading pipeline of the original dataset"
+                        " always return None. Please check the correctness "
+                        "of the dataset and its pipeline."
+                    )
 
             for i in range(self.max_refetch):
                 # To confirm the results passed the training pipeline
@@ -147,12 +151,13 @@ class MultiImageMixDataset:
                     break
             else:
                 raise RuntimeError(
-                    'The training pipeline of the dataset wrapper'
-                    ' always return None.Please check the correctness '
-                    'of the dataset and its pipeline.')
+                    "The training pipeline of the dataset wrapper"
+                    " always return None.Please check the correctness "
+                    "of the dataset and its pipeline."
+                )
 
-            if 'mix_results' in results:
-                results.pop('mix_results')
+            if "mix_results" in results:
+                results.pop("mix_results")
 
         return results
 
@@ -163,7 +168,5 @@ class MultiImageMixDataset:
             skip_type_keys (list[str], optional): Sequence of type
                 string to be skip pipeline.
         """
-        assert all([
-            isinstance(skip_type_key, str) for skip_type_key in skip_type_keys
-        ])
+        assert all([isinstance(skip_type_key, str) for skip_type_key in skip_type_keys])
         self._skip_type_keys = skip_type_keys

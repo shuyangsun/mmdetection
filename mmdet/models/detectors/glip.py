@@ -27,24 +27,26 @@ def find_noun_phrases(caption: str) -> list:
     """
     try:
         import nltk
-        nltk.download('punkt')
-        nltk.download('averaged_perceptron_tagger')
+
+        nltk.download("punkt")
+        nltk.download("averaged_perceptron_tagger")
     except ImportError:
-        raise RuntimeError('nltk is not installed, please install it by: '
-                           'pip install nltk.')
+        raise RuntimeError(
+            "nltk is not installed, please install it by: " "pip install nltk."
+        )
 
     caption = caption.lower()
     tokens = nltk.word_tokenize(caption)
     pos_tags = nltk.pos_tag(tokens)
 
-    grammar = 'NP: {<DT>?<JJ.*>*<NN.*>+}'
+    grammar = "NP: {<DT>?<JJ.*>*<NN.*>+}"
     cp = nltk.RegexpParser(grammar)
     result = cp.parse(pos_tags)
 
     noun_phrases = []
     for subtree in result.subtrees():
-        if subtree.label() == 'NP':
-            noun_phrases.append(' '.join(t[0] for t in subtree.leaves()))
+        if subtree.label() == "NP":
+            noun_phrases.append(" ".join(t[0] for t in subtree.leaves()))
 
     return noun_phrases
 
@@ -58,11 +60,34 @@ def remove_punctuation(text: str) -> str:
         str: The text with punctuation removed.
     """
     punctuation = [
-        '|', ':', ';', '@', '(', ')', '[', ']', '{', '}', '^', '\'', '\"', '’',
-        '`', '?', '$', '%', '#', '!', '&', '*', '+', ',', '.'
+        "|",
+        ":",
+        ";",
+        "@",
+        "(",
+        ")",
+        "[",
+        "]",
+        "{",
+        "}",
+        "^",
+        "'",
+        '"',
+        "’",
+        "`",
+        "?",
+        "$",
+        "%",
+        "#",
+        "!",
+        "&",
+        "*",
+        "+",
+        ",",
+        ".",
     ]
     for p in punctuation:
-        text = text.replace(p, '')
+        text = text.replace(p, "")
     return text.strip()
 
 
@@ -78,7 +103,7 @@ def run_ner(caption: str) -> Tuple[list, list]:
     """
     noun_phrases = find_noun_phrases(caption)
     noun_phrases = [remove_punctuation(phrase) for phrase in noun_phrases]
-    noun_phrases = [phrase for phrase in noun_phrases if phrase != '']
+    noun_phrases = [phrase for phrase in noun_phrases if phrase != ""]
     relevant_phrases = noun_phrases
     labels = noun_phrases
 
@@ -90,15 +115,15 @@ def run_ner(caption: str) -> Tuple[list, list]:
             for m in re.finditer(entity, caption.lower()):
                 tokens_positive.append([[m.start(), m.end()]])
         except Exception:
-            print('noun entities:', noun_phrases)
-            print('entity:', entity)
-            print('caption:', caption.lower())
+            print("noun entities:", noun_phrases)
+            print("entity:", entity)
+            print("caption:", caption.lower())
     return tokens_positive, noun_phrases
 
 
-def create_positive_map(tokenized,
-                        tokens_positive: list,
-                        max_num_entities: int = 256) -> Tensor:
+def create_positive_map(
+    tokenized, tokens_positive: list, max_num_entities: int = 256
+) -> Tensor:
     """construct a map such that positive_map[i,j] = True
     if box i is associated to token j
     Args:
@@ -114,17 +139,18 @@ def create_positive_map(tokenized,
     Raises:
         Exception: If an error occurs during token-to-char mapping.
     """
-    positive_map = torch.zeros((len(tokens_positive), max_num_entities),
-                               dtype=torch.float)
+    positive_map = torch.zeros(
+        (len(tokens_positive), max_num_entities), dtype=torch.float
+    )
 
     for j, tok_list in enumerate(tokens_positive):
-        for (beg, end) in tok_list:
+        for beg, end in tok_list:
             try:
                 beg_pos = tokenized.char_to_token(beg)
                 end_pos = tokenized.char_to_token(end - 1)
             except Exception as e:
-                print('beg:', beg, 'end:', end)
-                print('token_positive:', tokens_positive)
+                print("beg:", beg, "end:", end)
+                print("token_positive:", tokens_positive)
                 raise e
             if beg_pos is None:
                 try:
@@ -144,12 +170,11 @@ def create_positive_map(tokenized,
                 continue
 
             assert beg_pos is not None and end_pos is not None
-            positive_map[j, beg_pos:end_pos + 1].fill_(1)
+            positive_map[j, beg_pos : end_pos + 1].fill_(1)
     return positive_map / (positive_map.sum(-1)[:, None] + 1e-6)
 
 
-def create_positive_map_label_to_token(positive_map: Tensor,
-                                       plus: int = 0) -> dict:
+def create_positive_map_label_to_token(positive_map: Tensor, plus: int = 0) -> dict:
     """Create a dictionary mapping the label to the token.
     Args:
         positive_map (Tensor): The positive map tensor.
@@ -162,7 +187,8 @@ def create_positive_map_label_to_token(positive_map: Tensor,
     positive_map_label_to_token = {}
     for i in range(len(positive_map)):
         positive_map_label_to_token[i + plus] = torch.nonzero(
-            positive_map[i], as_tuple=True)[0].tolist()
+            positive_map[i], as_tuple=True
+        )[0].tolist()
     return positive_map_label_to_token
 
 
@@ -186,15 +212,17 @@ class GLIP(SingleStageDetector):
             Defaults to None.
     """
 
-    def __init__(self,
-                 backbone: ConfigType,
-                 neck: ConfigType,
-                 bbox_head: ConfigType,
-                 language_model: ConfigType,
-                 train_cfg: OptConfigType = None,
-                 test_cfg: OptConfigType = None,
-                 data_preprocessor: OptConfigType = None,
-                 init_cfg: OptMultiConfig = None) -> None:
+    def __init__(
+        self,
+        backbone: ConfigType,
+        neck: ConfigType,
+        bbox_head: ConfigType,
+        language_model: ConfigType,
+        train_cfg: OptConfigType = None,
+        test_cfg: OptConfigType = None,
+        data_preprocessor: OptConfigType = None,
+        init_cfg: OptMultiConfig = None,
+    ) -> None:
         super().__init__(
             backbone=backbone,
             neck=neck,
@@ -202,7 +230,8 @@ class GLIP(SingleStageDetector):
             train_cfg=train_cfg,
             test_cfg=test_cfg,
             data_preprocessor=data_preprocessor,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
         self.language_model = MODELS.build(language_model)
 
         self._text_prompts = None
@@ -211,49 +240,49 @@ class GLIP(SingleStageDetector):
         self._entities = None
 
     def get_tokens_positive_and_prompts(
-            self,
-            original_caption: str,
-            custom_entities: bool = False) -> Tuple[dict, str]:
+        self, original_caption: str, custom_entities: bool = False
+    ) -> Tuple[dict, str]:
         """Get the tokens positive and prompts for the caption."""
         if isinstance(original_caption, (list, tuple)) or custom_entities:
             if custom_entities and isinstance(original_caption, str):
-                if not original_caption.endswith('.'):
-                    original_caption = original_caption + ' . '
-                original_caption = original_caption.split(' . ')
-                original_caption = list(
-                    filter(lambda x: len(x) > 0, original_caption))
+                if not original_caption.endswith("."):
+                    original_caption = original_caption + " . "
+                original_caption = original_caption.split(" . ")
+                original_caption = list(filter(lambda x: len(x) > 0, original_caption))
 
-            caption_string = ''
+            caption_string = ""
             tokens_positive = []
-            seperation_tokens = ' . '
+            seperation_tokens = " . "
             for word in original_caption:
                 tokens_positive.append(
-                    [[len(caption_string),
-                      len(caption_string) + len(word)]])
+                    [[len(caption_string), len(caption_string) + len(word)]]
+                )
                 caption_string += word
                 caption_string += seperation_tokens
-            tokenized = self.language_model.tokenizer([caption_string],
-                                                      return_tensors='pt')
+            tokenized = self.language_model.tokenizer(
+                [caption_string], return_tensors="pt"
+            )
             self._entities = original_caption
         else:
-            if not original_caption.endswith('.'):
-                original_caption = original_caption + ' . '
+            if not original_caption.endswith("."):
+                original_caption = original_caption + " . "
 
-            tokenized = self.language_model.tokenizer([original_caption],
-                                                      return_tensors='pt')
+            tokenized = self.language_model.tokenizer(
+                [original_caption], return_tensors="pt"
+            )
             tokens_positive, noun_phrases = run_ner(original_caption)
             self._entities = noun_phrases
             caption_string = original_caption
 
         positive_map = create_positive_map(tokenized, tokens_positive)
         positive_map_label_to_token = create_positive_map_label_to_token(
-            positive_map, plus=1)
+            positive_map, plus=1
+        )
         return positive_map_label_to_token, caption_string
 
-    def predict(self,
-                batch_inputs: Tensor,
-                batch_data_samples: SampleList,
-                rescale: bool = True) -> SampleList:
+    def predict(
+        self, batch_inputs: Tensor, batch_data_samples: SampleList, rescale: bool = True
+    ) -> SampleList:
         """Predict results from a batch of inputs and data samples with post-
         processing.
 
@@ -279,11 +308,9 @@ class GLIP(SingleStageDetector):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                     the last dimension 4 arrange as (x1, y1, x2, y2).
         """
-        text_prompts = [
-            data_samples.text for data_samples in batch_data_samples
-        ]
+        text_prompts = [data_samples.text for data_samples in batch_data_samples]
 
-        if 'custom_entities' in batch_data_samples[0]:
+        if "custom_entities" in batch_data_samples[0]:
             # Assuming that the `custom_entities` flag
             # inside a batch is always the same. For single image inference
             custom_entities = batch_data_samples[0].custom_entities
@@ -298,17 +325,16 @@ class GLIP(SingleStageDetector):
                 # so there is no need to calculate them multiple times.
                 _positive_maps_and_prompts = [
                     self.get_tokens_positive_and_prompts(
-                        text_prompts[0], custom_entities)
+                        text_prompts[0], custom_entities
+                    )
                 ] * len(batch_inputs)
             else:
                 _positive_maps_and_prompts = [
-                    self.get_tokens_positive_and_prompts(
-                        text_prompt, custom_entities)
+                    self.get_tokens_positive_and_prompts(text_prompt, custom_entities)
                     for text_prompt in text_prompts
                 ]
 
-            self._positive_maps, text_prompts = zip(
-                *_positive_maps_and_prompts)
+            self._positive_maps, text_prompts = zip(*_positive_maps_and_prompts)
             self._language_dict_features = self.language_model(text_prompts)
 
         for i, data_samples in enumerate(batch_data_samples):
@@ -320,20 +346,21 @@ class GLIP(SingleStageDetector):
             visual_features,
             copy.deepcopy(self._language_dict_features),
             batch_data_samples,
-            rescale=rescale)
+            rescale=rescale,
+        )
 
-        for data_sample, pred_instances in zip(batch_data_samples,
-                                               results_list):
+        for data_sample, pred_instances in zip(batch_data_samples, results_list):
             if len(pred_instances) > 0:
                 label_names = []
                 for labels in pred_instances.labels:
                     if labels >= len(self._entities):
                         warnings.warn(
-                            'The unexpected output indicates an issue with '
-                            'named entity recognition. You can try '
-                            'setting custom_entities=True and running '
-                            'again to see if it helps.')
-                        label_names.append('unobject')
+                            "The unexpected output indicates an issue with "
+                            "named entity recognition. You can try "
+                            "setting custom_entities=True and running "
+                            "again to see if it helps."
+                        )
+                        label_names.append("unobject")
                     else:
                         label_names.append(self._entities[labels])
                 # for visualization

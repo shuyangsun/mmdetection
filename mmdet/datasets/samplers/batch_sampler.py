@@ -21,16 +21,18 @@ class AspectRatioBatchSampler(BatchSampler):
             its size would be less than ``batch_size``.
     """
 
-    def __init__(self,
-                 sampler: Sampler,
-                 batch_size: int,
-                 drop_last: bool = False) -> None:
+    def __init__(
+        self, sampler: Sampler, batch_size: int, drop_last: bool = False
+    ) -> None:
         if not isinstance(sampler, Sampler):
-            raise TypeError('sampler should be an instance of ``Sampler``, '
-                            f'but got {sampler}')
+            raise TypeError(
+                "sampler should be an instance of ``Sampler``, " f"but got {sampler}"
+            )
         if not isinstance(batch_size, int) or batch_size <= 0:
-            raise ValueError('batch_size should be a positive integer value, '
-                             f'but got batch_size={batch_size}')
+            raise ValueError(
+                "batch_size should be a positive integer value, "
+                f"but got batch_size={batch_size}"
+            )
         self.sampler = sampler
         self.batch_size = batch_size
         self.drop_last = drop_last
@@ -40,7 +42,7 @@ class AspectRatioBatchSampler(BatchSampler):
     def __iter__(self) -> Sequence[int]:
         for idx in self.sampler:
             data_info = self.sampler.dataset.get_data_info(idx)
-            width, height = data_info['width'], data_info['height']
+            width, height = data_info["width"], data_info["height"]
             bucket_id = 0 if width < height else 1
             bucket = self._aspect_ratio_buckets[bucket_id]
             bucket.append(idx)
@@ -50,8 +52,7 @@ class AspectRatioBatchSampler(BatchSampler):
                 del bucket[:]
 
         # yield the rest data and reset the bucket
-        left_data = self._aspect_ratio_buckets[0] + self._aspect_ratio_buckets[
-            1]
+        left_data = self._aspect_ratio_buckets[0] + self._aspect_ratio_buckets[1]
         self._aspect_ratio_buckets = [[] for _ in range(2)]
         while len(left_data) > 0:
             if len(left_data) <= self.batch_size:
@@ -59,8 +60,8 @@ class AspectRatioBatchSampler(BatchSampler):
                     yield left_data[:]
                 left_data = []
             else:
-                yield left_data[:self.batch_size]
-                left_data = left_data[self.batch_size:]
+                yield left_data[: self.batch_size]
+                left_data = left_data[self.batch_size :]
 
     def __len__(self) -> int:
         if self.drop_last:
@@ -92,8 +93,8 @@ class TrackAspectRatioBatchSampler(AspectRatioBatchSampler):
             # video_idx
             data_info = self.sampler.dataset.get_data_info(video_idx)
             # data_info {video_id, images, video_length}
-            img_data_info = data_info['images'][0]
-            width, height = img_data_info['width'], img_data_info['height']
+            img_data_info = data_info["images"][0]
+            width, height = img_data_info["width"], img_data_info["height"]
             bucket_id = 0 if width < height else 1
             bucket = self._aspect_ratio_buckets[bucket_id]
             bucket.append(idx)
@@ -103,8 +104,7 @@ class TrackAspectRatioBatchSampler(AspectRatioBatchSampler):
                 del bucket[:]
 
         # yield the rest data and reset the bucket
-        left_data = self._aspect_ratio_buckets[0] + self._aspect_ratio_buckets[
-            1]
+        left_data = self._aspect_ratio_buckets[0] + self._aspect_ratio_buckets[1]
         self._aspect_ratio_buckets = [[] for _ in range(2)]
         while len(left_data) > 0:
             if len(left_data) <= self.batch_size:
@@ -112,5 +112,5 @@ class TrackAspectRatioBatchSampler(AspectRatioBatchSampler):
                     yield left_data[:]
                 left_data = []
             else:
-                yield left_data[:self.batch_size]
-                left_data = left_data[self.batch_size:]
+                yield left_data[: self.batch_size]
+                left_data = left_data[self.batch_size :]

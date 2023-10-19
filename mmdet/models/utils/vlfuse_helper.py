@@ -11,12 +11,11 @@ from torch import Tensor
 try:
     from transformers import BertPreTrainedModel
     from transformers.modeling_utils import apply_chunking_to_forward
-    from transformers.models.bert.modeling_bert import \
-        BertAttention as HFBertAttention
-    from transformers.models.bert.modeling_bert import \
-        BertIntermediate as HFBertIntermediate
-    from transformers.models.bert.modeling_bert import \
-        BertOutput as HFBertOutput
+    from transformers.models.bert.modeling_bert import BertAttention as HFBertAttention
+    from transformers.models.bert.modeling_bert import (
+        BertIntermediate as HFBertIntermediate,
+    )
+    from transformers.models.bert.modeling_bert import BertOutput as HFBertOutput
 except ImportError:
     BertPreTrainedModel = object
     apply_chunking_to_forward = None
@@ -42,12 +41,14 @@ def clamp_values(vector):
 class BiMultiHeadAttention(nn.Module):
     """Bidirectional fusion Multi-Head Attention layer."""
 
-    def __init__(self,
-                 v_dim: int,
-                 l_dim: int,
-                 embed_dim: int,
-                 num_heads: int,
-                 dropout: float = 0.1):
+    def __init__(
+        self,
+        v_dim: int,
+        l_dim: int,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.1,
+    ):
         super(BiMultiHeadAttention, self).__init__()
 
         self.embed_dim = embed_dim
@@ -56,12 +57,12 @@ class BiMultiHeadAttention(nn.Module):
         self.v_dim = v_dim
         self.l_dim = l_dim
 
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), 'embed_dim must be divisible by num_heads ' \
-           f'(got `embed_dim`: {self.embed_dim} ' \
-           f'and `num_heads`: {self.num_heads}).'
-        self.scale = self.head_dim**(-0.5)
+        assert self.head_dim * self.num_heads == self.embed_dim, (
+            "embed_dim must be divisible by num_heads "
+            f"(got `embed_dim`: {self.embed_dim} "
+            f"and `num_heads`: {self.num_heads})."
+        )
+        self.scale = self.head_dim ** (-0.5)
         self.dropout = dropout
 
         self.v_proj = nn.Linear(self.v_dim, self.embed_dim)
@@ -79,8 +80,11 @@ class BiMultiHeadAttention(nn.Module):
         self._reset_parameters()
 
     def _shape(self, tensor: Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads,
-                           self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def _reset_parameters(self):
         nn.init.xavier_uniform_(self.v_proj.weight)
@@ -105,8 +109,7 @@ class BiMultiHeadAttention(nn.Module):
         value_l_states = self._shape(self.values_l_proj(lang), -1, bsz)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len,
-                                   bsz).view(*proj_shape)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_v_states = value_v_states.view(*proj_shape)
         value_l_states = value_l_states.view(*proj_shape)
@@ -116,9 +119,10 @@ class BiMultiHeadAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f'Attention weights should be of '
-                f'size {(bsz * self.num_heads, tgt_len, src_len)}, '
-                f'but is {attn_weights.size()}')
+                f"Attention weights should be of "
+                f"size {(bsz * self.num_heads, tgt_len, src_len)}, "
+                f"but is {attn_weights.size()}"
+            )
 
         if self.stable_softmax_2d:
             attn_weights = attn_weights - attn_weights.max()
@@ -132,8 +136,8 @@ class BiMultiHeadAttention(nn.Module):
 
         attn_weights_T = attn_weights.transpose(1, 2)
         attn_weights_l = (
-            attn_weights_T -
-            torch.max(attn_weights_T, dim=-1, keepdim=True)[0])
+            attn_weights_T - torch.max(attn_weights_T, dim=-1, keepdim=True)[0]
+        )
         if self.clamp_min_for_underflow:
             # Do not increase -50000, data type half has quite limited range
             attn_weights_l = torch.clamp(attn_weights_l, min=-MAX_CLAMP_VALUE)
@@ -144,51 +148,48 @@ class BiMultiHeadAttention(nn.Module):
         attn_weights_l = attn_weights_l.softmax(dim=-1)
 
         if attention_mask_l is not None:
-            assert (attention_mask_l.dim() == 2)
+            assert attention_mask_l.dim() == 2
             attention_mask = attention_mask_l.unsqueeze(1).unsqueeze(1)
             attention_mask = attention_mask.expand(bsz, 1, tgt_len, src_len)
-            attention_mask = attention_mask.masked_fill(
-                attention_mask == 0, -9e15)
+            attention_mask = attention_mask.masked_fill(attention_mask == 0, -9e15)
 
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError('Attention mask should be of '
-                                 f'size {(bsz, 1, tgt_len, src_len)}')
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len,
-                                             src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len,
-                                             src_len)
+                raise ValueError(
+                    "Attention mask should be of " f"size {(bsz, 1, tgt_len, src_len)}"
+                )
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights_v = nn.functional.softmax(attn_weights, dim=-1)
 
-        attn_probs_v = F.dropout(
-            attn_weights_v, p=self.dropout, training=self.training)
-        attn_probs_l = F.dropout(
-            attn_weights_l, p=self.dropout, training=self.training)
+        attn_probs_v = F.dropout(attn_weights_v, p=self.dropout, training=self.training)
+        attn_probs_l = F.dropout(attn_weights_l, p=self.dropout, training=self.training)
 
         attn_output_v = torch.bmm(attn_probs_v, value_l_states)
         attn_output_l = torch.bmm(attn_probs_l, value_v_states)
 
-        if attn_output_v.size() != (bsz * self.num_heads, tgt_len,
-                                    self.head_dim):
+        if attn_output_v.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                '`attn_output_v` should be of '
-                f'size {(bsz, self.num_heads, tgt_len, self.head_dim)}, '
-                f'but is {attn_output_v.size()}')
+                "`attn_output_v` should be of "
+                f"size {(bsz, self.num_heads, tgt_len, self.head_dim)}, "
+                f"but is {attn_output_v.size()}"
+            )
 
-        if attn_output_l.size() != (bsz * self.num_heads, src_len,
-                                    self.head_dim):
+        if attn_output_l.size() != (bsz * self.num_heads, src_len, self.head_dim):
             raise ValueError(
-                '`attn_output_l` should be of size '
-                f'{(bsz, self.num_heads, src_len, self.head_dim)}, '
-                f'but is {attn_output_l.size()}')
+                "`attn_output_l` should be of size "
+                f"{(bsz, self.num_heads, src_len, self.head_dim)}, "
+                f"but is {attn_output_l.size()}"
+            )
 
-        attn_output_v = attn_output_v.view(bsz, self.num_heads, tgt_len,
-                                           self.head_dim)
+        attn_output_v = attn_output_v.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output_v = attn_output_v.transpose(1, 2)
         attn_output_v = attn_output_v.reshape(bsz, tgt_len, self.embed_dim)
 
-        attn_output_l = attn_output_l.view(bsz, self.num_heads, src_len,
-                                           self.head_dim)
+        attn_output_l = attn_output_l.view(bsz, self.num_heads, src_len, self.head_dim)
         attn_output_l = attn_output_l.transpose(1, 2)
         attn_output_l = attn_output_l.reshape(bsz, src_len, self.embed_dim)
 
@@ -206,14 +207,16 @@ class BiAttentionBlock(nn.Module):
     feature are split into multi levels.
     """
 
-    def __init__(self,
-                 v_dim: int,
-                 l_dim: int,
-                 embed_dim: int,
-                 num_heads: int,
-                 dropout: float = 0.1,
-                 drop_path: float = .0,
-                 init_values: float = 1e-4):
+    def __init__(
+        self,
+        v_dim: int,
+        l_dim: int,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.1,
+        drop_path: float = 0.0,
+        init_values: float = 1e-4,
+    ):
         super().__init__()
 
         # pre layer norm
@@ -224,21 +227,17 @@ class BiAttentionBlock(nn.Module):
             l_dim=l_dim,
             embed_dim=embed_dim,
             num_heads=num_heads,
-            dropout=dropout)
+            dropout=dropout,
+        )
 
         # add layer scale for training stability
-        self.drop_path = DropPath(
-            drop_path) if drop_path > 0. else nn.Identity()
-        self.gamma_v = nn.Parameter(
-            init_values * torch.ones(v_dim), requires_grad=True)
-        self.gamma_l = nn.Parameter(
-            init_values * torch.ones(l_dim), requires_grad=True)
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.gamma_v = nn.Parameter(init_values * torch.ones(v_dim), requires_grad=True)
+        self.gamma_l = nn.Parameter(init_values * torch.ones(l_dim), requires_grad=True)
 
-    def forward(self,
-                visual_features: list,
-                lang_feature: Tensor,
-                attention_mask_l=None):
-
+    def forward(
+        self, visual_features: list, lang_feature: Tensor, attention_mask_l=None
+    ):
         size_per_level, visual_features_flatten = [], []
         for i, feat_per_level in enumerate(visual_features):
             bs, c, h, w = feat_per_level.shape
@@ -247,18 +246,17 @@ class BiAttentionBlock(nn.Module):
             visual_features_flatten.append(feat)
         visual_features_flatten = torch.cat(visual_features_flatten, dim=1)
         new_v, new_lang_feature = self.single_attention_call(
-            visual_features_flatten,
-            lang_feature,
-            attention_mask_l=attention_mask_l)
+            visual_features_flatten, lang_feature, attention_mask_l=attention_mask_l
+        )
         # [bs, N, C] -> [bs, C, N]
         new_v = new_v.transpose(1, 2).contiguous()
 
         start = 0
         fusion_visual_features = []
-        for (h, w) in size_per_level:
-            new_v_per_level = new_v[:, :,
-                                    start:start + h * w].view(bs, -1, h,
-                                                              w).contiguous()
+        for h, w in size_per_level:
+            new_v_per_level = (
+                new_v[:, :, start : start + h * w].view(bs, -1, h, w).contiguous()
+            )
             fusion_visual_features.append(new_v_per_level)
             start += h * w
 
@@ -267,8 +265,7 @@ class BiAttentionBlock(nn.Module):
     def single_attention_call(self, visual, lang, attention_mask_l=None):
         visual = self.layer_norm_v(visual)
         lang = self.layer_norm_l(lang)
-        delta_v, delta_l = self.attn(
-            visual, lang, attention_mask_l=attention_mask_l)
+        delta_v, delta_l = self.attn(visual, lang, attention_mask_l=attention_mask_l)
         # visual, lang = visual + delta_v, l + delta_l
         visual = visual + self.drop_path(self.gamma_v * delta_v)
         lang = lang + self.drop_path(self.gamma_l * delta_l)
@@ -278,14 +275,16 @@ class BiAttentionBlock(nn.Module):
 class VLFuse(nn.Module):
     """Early Fusion Module."""
 
-    def __init__(self,
-                 v_dim: int = 256,
-                 l_dim: int = 768,
-                 embed_dim: int = 2048,
-                 num_heads: int = 8,
-                 dropout: float = 0.1,
-                 drop_path: float = 0.0,
-                 use_checkpoint: bool = False):
+    def __init__(
+        self,
+        v_dim: int = 256,
+        l_dim: int = 768,
+        embed_dim: int = 2048,
+        num_heads: int = 8,
+        dropout: float = 0.1,
+        drop_path: float = 0.0,
+        use_checkpoint: bool = False,
+    ):
         super().__init__()
         # bi-direction (text->image, image->text)
         self.use_checkpoint = use_checkpoint
@@ -296,27 +295,33 @@ class VLFuse(nn.Module):
             num_heads=num_heads,
             dropout=dropout,
             drop_path=drop_path,
-            init_values=1.0 / 6.0)
+            init_values=1.0 / 6.0,
+        )
 
     def forward(self, x):
-        visual_features = x['visual']
-        language_dict_features = x['lang']
+        visual_features = x["visual"]
+        language_dict_features = x["lang"]
 
         if self.use_checkpoint:
             fused_visual_features, language_features = checkpoint.checkpoint(
-                self.b_attn, visual_features, language_dict_features['hidden'],
-                language_dict_features['masks'])
+                self.b_attn,
+                visual_features,
+                language_dict_features["hidden"],
+                language_dict_features["masks"],
+            )
         else:
             fused_visual_features, language_features = self.b_attn(
-                visual_features, language_dict_features['hidden'],
-                language_dict_features['masks'])
+                visual_features,
+                language_dict_features["hidden"],
+                language_dict_features["masks"],
+            )
 
-        language_dict_features['hidden'] = language_features
+        language_dict_features["hidden"] = language_features
         fused_language_dict_features = language_dict_features
 
         features_dict = {
-            'visual': fused_visual_features,
-            'lang': fused_language_dict_features
+            "visual": fused_visual_features,
+            "lang": fused_language_dict_features,
         }
 
         return features_dict
@@ -325,24 +330,27 @@ class VLFuse(nn.Module):
 class BertEncoderLayer(BertPreTrainedModel):
     """Modified from transformers.models.bert.modeling_bert.BertLayer."""
 
-    def __init__(self,
-                 config,
-                 clamp_min_for_underflow: bool = False,
-                 clamp_max_for_overflow: bool = False):
+    def __init__(
+        self,
+        config,
+        clamp_min_for_underflow: bool = False,
+        clamp_max_for_overflow: bool = False,
+    ):
         super().__init__(config)
         self.config = config
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
 
-        self.attention = BertAttention(config, clamp_min_for_underflow,
-                                       clamp_max_for_overflow)
+        self.attention = BertAttention(
+            config, clamp_min_for_underflow, clamp_max_for_overflow
+        )
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
     def forward(self, inputs):
-        language_dict_features = inputs['lang']
-        hidden_states = language_dict_features['hidden']
-        attention_mask = language_dict_features['masks']
+        language_dict_features = inputs["lang"]
+        hidden_states = language_dict_features["hidden"]
+        attention_mask = language_dict_features["masks"]
 
         device = hidden_states.device
         input_shape = hidden_states.size()[:-1]
@@ -351,7 +359,8 @@ class BertEncoderLayer(BertPreTrainedModel):
         # ourselves in which case we just need to make it
         # broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(
-            attention_mask, input_shape, device)
+            attention_mask, input_shape, device
+        )
 
         self_attention_outputs = self.attention(
             hidden_states,
@@ -362,20 +371,20 @@ class BertEncoderLayer(BertPreTrainedModel):
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[
-            1:]  # add self attentions if we output attention weights
-        layer_output = apply_chunking_to_forward(self.feed_forward_chunk,
-                                                 self.chunk_size_feed_forward,
-                                                 self.seq_len_dim,
-                                                 attention_output)
-        outputs = (layer_output, ) + outputs
+            1:
+        ]  # add self attentions if we output attention weights
+        layer_output = apply_chunking_to_forward(
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
+        )
+        outputs = (layer_output,) + outputs
         hidden_states = outputs[0]
 
-        language_dict_features['hidden'] = hidden_states
+        language_dict_features["hidden"] = hidden_states
 
-        features_dict = {
-            'visual': inputs['visual'],
-            'lang': language_dict_features
-        }
+        features_dict = {"visual": inputs["visual"], "lang": language_dict_features}
 
         return features_dict
 
@@ -393,45 +402,52 @@ class BertSelfAttention(nn.Module):
     Compared to the BertSelfAttention of Huggingface, only add the clamp.
     """
 
-    def __init__(self,
-                 config,
-                 clamp_min_for_underflow: bool = False,
-                 clamp_max_for_overflow: bool = False):
+    def __init__(
+        self,
+        config,
+        clamp_min_for_underflow: bool = False,
+        clamp_max_for_overflow: bool = False,
+    ):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and \
-                not hasattr(config, 'embedding_size'):
-            raise ValueError(f'The hidden size ({config.hidden_size}) is '
-                             'not a multiple of the number of attention '
-                             f'heads ({config.num_attention_heads})')
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is "
+                "not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
 
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size /
-                                       config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * \
-            self.attention_head_size
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config,
-                                               'position_embedding_type',
-                                               'absolute')
-        if self.position_embedding_type == 'relative_key' or \
-                self.position_embedding_type == 'relative_key_query':
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(
-                2 * config.max_position_embeddings - 1,
-                self.attention_head_size)
+                2 * config.max_position_embeddings - 1, self.attention_head_size
+            )
         self.clamp_min_for_underflow = clamp_min_for_underflow
         self.clamp_max_for_overflow = clamp_max_for_overflow
 
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads,
-                                       self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -458,10 +474,8 @@ class BertSelfAttention(nn.Module):
             value_layer = past_key_value[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
-            key_layer = self.transpose_for_scores(
-                self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(
-                self.value(encoder_hidden_states))
+            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
+            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
             attention_mask = encoder_attention_mask
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -479,39 +493,46 @@ class BertSelfAttention(nn.Module):
 
         # Take the dot product between "query" and "key"
         # to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer,
-                                        key_layer.transpose(-1, -2))
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == 'relative_key' or \
-                self.position_embedding_type == 'relative_key_query':
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             seq_length = hidden_states.size()[1]
             position_ids_l = torch.arange(
-                seq_length, dtype=torch.long,
-                device=hidden_states.device).view(-1, 1)
+                seq_length, dtype=torch.long, device=hidden_states.device
+            ).view(-1, 1)
             position_ids_r = torch.arange(
-                seq_length, dtype=torch.long,
-                device=hidden_states.device).view(1, -1)
+                seq_length, dtype=torch.long, device=hidden_states.device
+            ).view(1, -1)
             distance = position_ids_l - position_ids_r
             positional_embedding = self.distance_embedding(
-                distance + self.max_position_embeddings - 1)
+                distance + self.max_position_embeddings - 1
+            )
             positional_embedding = positional_embedding.to(
-                dtype=query_layer.dtype)  # fp16 compatibility
+                dtype=query_layer.dtype
+            )  # fp16 compatibility
 
-            if self.position_embedding_type == 'relative_key':
+            if self.position_embedding_type == "relative_key":
                 relative_position_scores = torch.einsum(
-                    'bhld,lrd->bhlr', query_layer, positional_embedding)
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
                 attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == 'relative_key_query':
+            elif self.position_embedding_type == "relative_key_query":
                 relative_position_scores_query = torch.einsum(
-                    'bhld,lrd->bhlr', query_layer, positional_embedding)
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
                 relative_position_scores_key = torch.einsum(
-                    'bhrd,lrd->bhlr', key_layer, positional_embedding)
-                attention_scores = attention_scores + \
-                    relative_position_scores_query + \
-                    relative_position_scores_key
+                    "bhrd,lrd->bhlr", key_layer, positional_embedding
+                )
+                attention_scores = (
+                    attention_scores
+                    + relative_position_scores_query
+                    + relative_position_scores_key
+                )
 
-        attention_scores = attention_scores / math.sqrt(
-            self.attention_head_size)
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         if self.clamp_min_for_underflow:
             attention_scores = torch.clamp(
@@ -541,15 +562,15 @@ class BertSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (
-            self.all_head_size, )
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer,
-                   attention_probs) if output_attentions else (context_layer, )
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         if self.is_decoder:
-            outputs = outputs + (past_key_value, )
+            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -559,17 +580,19 @@ class BertAttention(HFBertAttention):
     Compared to the BertAttention of Huggingface, only add the clamp.
     """
 
-    def __init__(self,
-                 config,
-                 clamp_min_for_underflow: bool = False,
-                 clamp_max_for_overflow: bool = False):
+    def __init__(
+        self,
+        config,
+        clamp_min_for_underflow: bool = False,
+        clamp_max_for_overflow: bool = False,
+    ):
         super().__init__(config)
-        self.self = BertSelfAttention(config, clamp_min_for_underflow,
-                                      clamp_max_for_overflow)
+        self.self = BertSelfAttention(
+            config, clamp_min_for_underflow, clamp_max_for_overflow
+        )
 
 
 class BertIntermediate(HFBertIntermediate):
-
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = clamp_values(hidden_states)
@@ -579,7 +602,6 @@ class BertIntermediate(HFBertIntermediate):
 
 
 class BertOutput(HFBertOutput):
-
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)

@@ -12,8 +12,11 @@ from torch.nn.init import normal_
 from mmdet.registry import MODELS
 from mmdet.structures import OptSampleList
 from mmdet.utils import OptConfigType
-from ..layers import (DeformableDetrTransformerDecoder,
-                      DeformableDetrTransformerEncoder, SinePositionalEncoding)
+from ..layers import (
+    DeformableDetrTransformerDecoder,
+    DeformableDetrTransformerEncoder,
+    SinePositionalEncoding,
+)
 from .base_detr import DetectionTransformer
 
 
@@ -38,62 +41,69 @@ class DeformableDETR(DetectionTransformer):
             Defaults to 4.
     """
 
-    def __init__(self,
-                 *args,
-                 decoder: OptConfigType = None,
-                 bbox_head: OptConfigType = None,
-                 with_box_refine: bool = False,
-                 as_two_stage: bool = False,
-                 num_feature_levels: int = 4,
-                 **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        decoder: OptConfigType = None,
+        bbox_head: OptConfigType = None,
+        with_box_refine: bool = False,
+        as_two_stage: bool = False,
+        num_feature_levels: int = 4,
+        **kwargs,
+    ) -> None:
         self.with_box_refine = with_box_refine
         self.as_two_stage = as_two_stage
         self.num_feature_levels = num_feature_levels
 
         if bbox_head is not None:
-            assert 'share_pred_layer' not in bbox_head and \
-                   'num_pred_layer' not in bbox_head and \
-                   'as_two_stage' not in bbox_head, \
-                'The two keyword args `share_pred_layer`, `num_pred_layer`, ' \
-                'and `as_two_stage are set in `detector.__init__()`, users ' \
-                'should not set them in `bbox_head` config.'
+            assert (
+                "share_pred_layer" not in bbox_head
+                and "num_pred_layer" not in bbox_head
+                and "as_two_stage" not in bbox_head
+            ), (
+                "The two keyword args `share_pred_layer`, `num_pred_layer`, "
+                "and `as_two_stage are set in `detector.__init__()`, users "
+                "should not set them in `bbox_head` config."
+            )
             # The last prediction layer is used to generate proposal
             # from encode feature map when `as_two_stage` is `True`.
             # And all the prediction layers should share parameters
             # when `with_box_refine` is `True`.
-            bbox_head['share_pred_layer'] = not with_box_refine
-            bbox_head['num_pred_layer'] = (decoder['num_layers'] + 1) \
-                if self.as_two_stage else decoder['num_layers']
-            bbox_head['as_two_stage'] = as_two_stage
+            bbox_head["share_pred_layer"] = not with_box_refine
+            bbox_head["num_pred_layer"] = (
+                (decoder["num_layers"] + 1)
+                if self.as_two_stage
+                else decoder["num_layers"]
+            )
+            bbox_head["as_two_stage"] = as_two_stage
 
         super().__init__(*args, decoder=decoder, bbox_head=bbox_head, **kwargs)
 
     def _init_layers(self) -> None:
         """Initialize layers except for backbone, neck and bbox_head."""
-        self.positional_encoding = SinePositionalEncoding(
-            **self.positional_encoding)
+        self.positional_encoding = SinePositionalEncoding(**self.positional_encoding)
         self.encoder = DeformableDetrTransformerEncoder(**self.encoder)
         self.decoder = DeformableDetrTransformerDecoder(**self.decoder)
         self.embed_dims = self.encoder.embed_dims
         if not self.as_two_stage:
-            self.query_embedding = nn.Embedding(self.num_queries,
-                                                self.embed_dims * 2)
+            self.query_embedding = nn.Embedding(self.num_queries, self.embed_dims * 2)
             # NOTE The query_embedding will be split into query and query_pos
             # in self.pre_decoder, hence, the embed_dims are doubled.
 
         num_feats = self.positional_encoding.num_feats
-        assert num_feats * 2 == self.embed_dims, \
-            'embed_dims should be exactly 2 times of num_feats. ' \
-            f'Found {self.embed_dims} and {num_feats}.'
+        assert num_feats * 2 == self.embed_dims, (
+            "embed_dims should be exactly 2 times of num_feats. "
+            f"Found {self.embed_dims} and {num_feats}."
+        )
 
         self.level_embed = nn.Parameter(
-            torch.Tensor(self.num_feature_levels, self.embed_dims))
+            torch.Tensor(self.num_feature_levels, self.embed_dims)
+        )
 
         if self.as_two_stage:
             self.memory_trans_fc = nn.Linear(self.embed_dims, self.embed_dims)
             self.memory_trans_norm = nn.LayerNorm(self.embed_dims)
-            self.pos_trans_fc = nn.Linear(self.embed_dims * 2,
-                                          self.embed_dims * 2)
+            self.pos_trans_fc = nn.Linear(self.embed_dims * 2, self.embed_dims * 2)
             self.pos_trans_norm = nn.LayerNorm(self.embed_dims * 2)
         else:
             self.reference_points_fc = nn.Linear(self.embed_dims, 2)
@@ -112,14 +122,12 @@ class DeformableDETR(DetectionTransformer):
             nn.init.xavier_uniform_(self.memory_trans_fc.weight)
             nn.init.xavier_uniform_(self.pos_trans_fc.weight)
         else:
-            xavier_init(
-                self.reference_points_fc, distribution='uniform', bias=0.)
+            xavier_init(self.reference_points_fc, distribution="uniform", bias=0.0)
         normal_(self.level_embed)
 
     def pre_transformer(
-            self,
-            mlvl_feats: Tuple[Tensor],
-            batch_data_samples: OptSampleList = None) -> Tuple[Dict]:
+        self, mlvl_feats: Tuple[Tensor], batch_data_samples: OptSampleList = None
+    ) -> Tuple[Dict]:
         """Process image features before feeding them to the transformer.
 
         The forward procedure of the transformer is defined as:
@@ -164,8 +172,10 @@ class DeformableDETR(DetectionTransformer):
         mlvl_pos_embeds = []
         for feat in mlvl_feats:
             mlvl_masks.append(
-                F.interpolate(masks[None],
-                              size=feat.shape[-2:]).to(torch.bool).squeeze(0))
+                F.interpolate(masks[None], size=feat.shape[-2:])
+                .to(torch.bool)
+                .squeeze(0)
+            )
             mlvl_pos_embeds.append(self.positional_encoding(mlvl_masks[-1]))
 
         feat_flatten = []
@@ -173,7 +183,8 @@ class DeformableDETR(DetectionTransformer):
         mask_flatten = []
         spatial_shapes = []
         for lvl, (feat, mask, pos_embed) in enumerate(
-                zip(mlvl_feats, mlvl_masks, mlvl_pos_embeds)):
+            zip(mlvl_feats, mlvl_masks, mlvl_pos_embeds)
+        ):
             batch_size, c, h, w = feat.shape
             # [bs, c, h_lvl, w_lvl] -> [bs, h_lvl*w_lvl, c]
             feat = feat.view(batch_size, c, -1).permute(0, 2, 1)
@@ -195,14 +206,17 @@ class DeformableDETR(DetectionTransformer):
         mask_flatten = torch.cat(mask_flatten, 1)
 
         spatial_shapes = torch.as_tensor(  # (num_level, 2)
-            spatial_shapes,
-            dtype=torch.long,
-            device=feat_flatten.device)
-        level_start_index = torch.cat((
-            spatial_shapes.new_zeros((1, )),  # (num_level)
-            spatial_shapes.prod(1).cumsum(0)[:-1]))
+            spatial_shapes, dtype=torch.long, device=feat_flatten.device
+        )
+        level_start_index = torch.cat(
+            (
+                spatial_shapes.new_zeros((1,)),  # (num_level)
+                spatial_shapes.prod(1).cumsum(0)[:-1],
+            )
+        )
         valid_ratios = torch.stack(  # (bs, num_level, 2)
-            [self.get_valid_ratio(m) for m in mlvl_masks], 1)
+            [self.get_valid_ratio(m) for m in mlvl_masks], 1
+        )
 
         encoder_inputs_dict = dict(
             feat=feat_flatten,
@@ -210,18 +224,25 @@ class DeformableDETR(DetectionTransformer):
             feat_pos=lvl_pos_embed_flatten,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
-            valid_ratios=valid_ratios)
+            valid_ratios=valid_ratios,
+        )
         decoder_inputs_dict = dict(
             memory_mask=mask_flatten,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
-            valid_ratios=valid_ratios)
+            valid_ratios=valid_ratios,
+        )
         return encoder_inputs_dict, decoder_inputs_dict
 
-    def forward_encoder(self, feat: Tensor, feat_mask: Tensor,
-                        feat_pos: Tensor, spatial_shapes: Tensor,
-                        level_start_index: Tensor,
-                        valid_ratios: Tensor) -> Dict:
+    def forward_encoder(
+        self,
+        feat: Tensor,
+        feat_mask: Tensor,
+        feat_pos: Tensor,
+        spatial_shapes: Tensor,
+        level_start_index: Tensor,
+        valid_ratios: Tensor,
+    ) -> Dict:
         """Forward with Transformer encoder.
 
         The forward procedure of the transformer is defined as:
@@ -255,15 +276,16 @@ class DeformableDETR(DetectionTransformer):
             key_padding_mask=feat_mask,  # for self_attn
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
-            valid_ratios=valid_ratios)
+            valid_ratios=valid_ratios,
+        )
         encoder_outputs_dict = dict(
-            memory=memory,
-            memory_mask=feat_mask,
-            spatial_shapes=spatial_shapes)
+            memory=memory, memory_mask=feat_mask, spatial_shapes=spatial_shapes
+        )
         return encoder_outputs_dict
 
-    def pre_decoder(self, memory: Tensor, memory_mask: Tensor,
-                    spatial_shapes: Tensor) -> Tuple[Dict, Dict]:
+    def pre_decoder(
+        self, memory: Tensor, memory_mask: Tensor, spatial_shapes: Tensor
+    ) -> Tuple[Dict, Dict]:
         """Prepare intermediate variables before entering Transformer decoder,
         such as `query`, `query_pos`, and `reference_points`.
 
@@ -298,14 +320,16 @@ class DeformableDETR(DetectionTransformer):
         """
         batch_size, _, c = memory.shape
         if self.as_two_stage:
-            output_memory, output_proposals = \
-                self.gen_encoder_output_proposals(
-                    memory, memory_mask, spatial_shapes)
-            enc_outputs_class = self.bbox_head.cls_branches[
-                self.decoder.num_layers](
-                    output_memory)
-            enc_outputs_coord_unact = self.bbox_head.reg_branches[
-                self.decoder.num_layers](output_memory) + output_proposals
+            output_memory, output_proposals = self.gen_encoder_output_proposals(
+                memory, memory_mask, spatial_shapes
+            )
+            enc_outputs_class = self.bbox_head.cls_branches[self.decoder.num_layers](
+                output_memory
+            )
+            enc_outputs_coord_unact = (
+                self.bbox_head.reg_branches[self.decoder.num_layers](output_memory)
+                + output_proposals
+            )
             enc_outputs_coord = enc_outputs_coord_unact.sigmoid()
             # We only use the first channel in enc_outputs_class as foreground,
             # the other (num_classes - 1) channels are actually not used.
@@ -316,14 +340,16 @@ class DeformableDETR(DetectionTransformer):
             # See https://github.com/open-mmlab/mmdetection/blob/master/mmdet/models/dense_heads/deformable_detr_head.py#L241 # noqa
             # This follows the official implementation of Deformable DETR.
             topk_proposals = torch.topk(
-                enc_outputs_class[..., 0], self.num_queries, dim=1)[1]
+                enc_outputs_class[..., 0], self.num_queries, dim=1
+            )[1]
             topk_coords_unact = torch.gather(
-                enc_outputs_coord_unact, 1,
-                topk_proposals.unsqueeze(-1).repeat(1, 1, 4))
+                enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
+            )
             topk_coords_unact = topk_coords_unact.detach()
             reference_points = topk_coords_unact.sigmoid()
             pos_trans_out = self.pos_trans_fc(
-                self.get_proposal_pos_embed(topk_coords_unact))
+                self.get_proposal_pos_embed(topk_coords_unact)
+            )
             pos_trans_out = self.pos_trans_norm(pos_trans_out)
             query_pos, query = torch.split(pos_trans_out, c, dim=2)
         else:
@@ -338,16 +364,28 @@ class DeformableDETR(DetectionTransformer):
             query=query,
             query_pos=query_pos,
             memory=memory,
-            reference_points=reference_points)
-        head_inputs_dict = dict(
-            enc_outputs_class=enc_outputs_class,
-            enc_outputs_coord=enc_outputs_coord) if self.training else dict()
+            reference_points=reference_points,
+        )
+        head_inputs_dict = (
+            dict(
+                enc_outputs_class=enc_outputs_class, enc_outputs_coord=enc_outputs_coord
+            )
+            if self.training
+            else dict()
+        )
         return decoder_inputs_dict, head_inputs_dict
 
-    def forward_decoder(self, query: Tensor, query_pos: Tensor, memory: Tensor,
-                        memory_mask: Tensor, reference_points: Tensor,
-                        spatial_shapes: Tensor, level_start_index: Tensor,
-                        valid_ratios: Tensor) -> Dict:
+    def forward_decoder(
+        self,
+        query: Tensor,
+        query_pos: Tensor,
+        memory: Tensor,
+        memory_mask: Tensor,
+        reference_points: Tensor,
+        spatial_shapes: Tensor,
+        level_start_index: Tensor,
+        valid_ratios: Tensor,
+    ) -> Dict:
         """Forward with Transformer decoder.
 
         The forward procedure of the transformer is defined as:
@@ -392,11 +430,10 @@ class DeformableDETR(DetectionTransformer):
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             valid_ratios=valid_ratios,
-            reg_branches=self.bbox_head.reg_branches
-            if self.with_box_refine else None)
+            reg_branches=self.bbox_head.reg_branches if self.with_box_refine else None,
+        )
         references = [reference_points, *inter_references]
-        decoder_outputs_dict = dict(
-            hidden_states=inter_states, references=references)
+        decoder_outputs_dict = dict(hidden_states=inter_states, references=references)
         return decoder_outputs_dict
 
     @staticmethod
@@ -439,8 +476,8 @@ class DeformableDETR(DetectionTransformer):
         return valid_ratio
 
     def gen_encoder_output_proposals(
-            self, memory: Tensor, memory_mask: Tensor,
-            spatial_shapes: Tensor) -> Tuple[Tensor, Tensor]:
+        self, memory: Tensor, memory_mask: Tensor, spatial_shapes: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         """Generate proposals from encoded memory. The function will only be
         used when `as_two_stage` is `True`.
 
@@ -466,16 +503,14 @@ class DeformableDETR(DetectionTransformer):
         proposals = []
         _cur = 0  # start index in the sequence of the current level
         for lvl, (H, W) in enumerate(spatial_shapes):
-            mask_flatten_ = memory_mask[:,
-                                        _cur:(_cur + H * W)].view(bs, H, W, 1)
+            mask_flatten_ = memory_mask[:, _cur : (_cur + H * W)].view(bs, H, W, 1)
             valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1).unsqueeze(-1)
             valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1).unsqueeze(-1)
 
             grid_y, grid_x = torch.meshgrid(
-                torch.linspace(
-                    0, H - 1, H, dtype=torch.float32, device=memory.device),
-                torch.linspace(
-                    0, W - 1, W, dtype=torch.float32, device=memory.device))
+                torch.linspace(0, H - 1, H, dtype=torch.float32, device=memory.device),
+                torch.linspace(0, W - 1, W, dtype=torch.float32, device=memory.device),
+            )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
             scale = torch.cat([valid_W, valid_H], 1).view(bs, 1, 1, 2)
@@ -483,32 +518,32 @@ class DeformableDETR(DetectionTransformer):
             wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
             proposal = torch.cat((grid, wh), -1).view(bs, -1, 4)
             proposals.append(proposal)
-            _cur += (H * W)
+            _cur += H * W
         output_proposals = torch.cat(proposals, 1)
-        output_proposals_valid = ((output_proposals > 0.01) &
-                                  (output_proposals < 0.99)).all(
-                                      -1, keepdim=True)
+        output_proposals_valid = (
+            (output_proposals > 0.01) & (output_proposals < 0.99)
+        ).all(-1, keepdim=True)
         # inverse_sigmoid
         output_proposals = torch.log(output_proposals / (1 - output_proposals))
         output_proposals = output_proposals.masked_fill(
-            memory_mask.unsqueeze(-1), float('inf'))
+            memory_mask.unsqueeze(-1), float("inf")
+        )
         output_proposals = output_proposals.masked_fill(
-            ~output_proposals_valid, float('inf'))
+            ~output_proposals_valid, float("inf")
+        )
 
         output_memory = memory
-        output_memory = output_memory.masked_fill(
-            memory_mask.unsqueeze(-1), float(0))
-        output_memory = output_memory.masked_fill(~output_proposals_valid,
-                                                  float(0))
+        output_memory = output_memory.masked_fill(memory_mask.unsqueeze(-1), float(0))
+        output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
         output_memory = self.memory_trans_fc(output_memory)
         output_memory = self.memory_trans_norm(output_memory)
         # [bs, sum(hw), 2]
         return output_memory, output_proposals
 
     @staticmethod
-    def get_proposal_pos_embed(proposals: Tensor,
-                               num_pos_feats: int = 128,
-                               temperature: int = 10000) -> Tensor:
+    def get_proposal_pos_embed(
+        proposals: Tensor, num_pos_feats: int = 128, temperature: int = 10000
+    ) -> Tensor:
         """Get the position embedding of the proposal.
 
         Args:
@@ -529,13 +564,15 @@ class DeformableDETR(DetectionTransformer):
         """
         scale = 2 * math.pi
         dim_t = torch.arange(
-            num_pos_feats, dtype=torch.float32, device=proposals.device)
-        dim_t = temperature**(2 * (dim_t // 2) / num_pos_feats)
+            num_pos_feats, dtype=torch.float32, device=proposals.device
+        )
+        dim_t = temperature ** (2 * (dim_t // 2) / num_pos_feats)
         # N, L, 4
         proposals = proposals.sigmoid() * scale
         # N, L, 4, 128
         pos = proposals[:, :, :, None] / dim_t
         # N, L, 4, 64, 2
-        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()),
-                          dim=4).flatten(2)
+        pos = torch.stack(
+            (pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4
+        ).flatten(2)
         return pos
