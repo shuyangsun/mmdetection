@@ -28,6 +28,11 @@ def parse_args():
         default=1,
         help="The interval of show (s), 0 is block",
     )
+    parser.add_argument(
+        "--background-color",
+        type=str,
+        help="Hex color of background in #000000 format. Default is empty string, original video will be the background.",
+    )
     args = parser.parse_args()
     return args
 
