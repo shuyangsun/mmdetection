@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import argparse
+import numpy as np
 
 import cv2
 import mmcv
@@ -29,9 +30,9 @@ def parse_args():
         help="The interval of show (s), 0 is block",
     )
     parser.add_argument(
-        "--background-color",
-        type=str,
-        help="Hex color of background in #000000 format. Default is empty string, original video will be the background.",
+        "--black-background",
+        action=argparse.BooleanOptionalAction,
+        help="If true, use black background, generate video for masks.",
     )
     args = parser.parse_args()
     return args
@@ -73,6 +74,8 @@ def main():
 
     for frame in track_iter_progress(video_reader):
         result = inference_detector(model, frame, test_pipeline=test_pipeline)
+        if args.black_background:
+            frame = np.zeros_like(frame)
         visualizer.add_datasample(
             name="video",
             image=frame,
