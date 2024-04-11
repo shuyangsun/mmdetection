@@ -135,6 +135,16 @@ class DetLocalVisualizer(Visualizer):
         ):
             bboxes = instances.bboxes
             labels = instances.labels
+            # MARK: SSML_CUSTOM BEGIN
+            # Remove unnecessary classes
+            keep_indices = []
+            for i, label in enumerate(labels):
+                if label in (0, 2, 7):  # Person, Car, Truck
+                    keep_indices.append(i)
+            keep_indices = torch.Tensor(keep_indices).long()
+            labels = torch.index_select(labels, dim=0, index=keep_indices)
+            bboxes = torch.index_select(bboxes, dim=0, index=keep_indices)
+            # MARK: SSML_CUSTOM END
 
             max_label = int(max(labels) if len(labels) > 0 else 0)
             text_palette = get_palette(self.text_color, max_label + 1)
@@ -181,10 +191,10 @@ class DetLocalVisualizer(Visualizer):
                 )
 
         if "masks" in instances:
-            # MARK: SSML_CUSTOM BEGIN
-            # Remove unnecessary classes
             labels = instances.labels
             masks = instances.masks
+            # MARK: SSML_CUSTOM BEGIN
+            # Remove unnecessary classes
             keep_indices = []
             for i, label in enumerate(labels):
                 if label in (0, 2, 7):  # Person, Car, Truck
