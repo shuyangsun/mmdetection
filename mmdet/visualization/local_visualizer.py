@@ -90,10 +90,12 @@ class DetLocalVisualizer(Visualizer):
         mask_color: Optional[Union[str, Tuple[int]]] = None,
         line_width: Union[int, float] = 3,
         alpha: float = 0.5,
+        draw_bboxes: bool = False,  # MARK: SSML_CUSTOM
     ) -> None:
         super().__init__(
             name=name, image=image, vis_backends=vis_backends, save_dir=save_dir
         )
+        self.draw_bboxes = draw_bboxes
         self.bbox_color = bbox_color
         self.text_color = text_color
         self.mask_color = mask_color
@@ -126,7 +128,7 @@ class DetLocalVisualizer(Visualizer):
         """
         self.set_image(image)
 
-        if "bboxes" in instances and instances.bboxes.sum() > 0:
+        if self.draw_bboxes and "bboxes" in instances and instances.bboxes.sum() > 0:
             bboxes = instances.bboxes
             labels = instances.labels
 
