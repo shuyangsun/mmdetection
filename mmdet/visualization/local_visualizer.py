@@ -177,8 +177,18 @@ class DetLocalVisualizer(Visualizer):
                 )
 
         if "masks" in instances:
+            # MARK: SSML_CUSTOM BEGIN
+            # Remove unnecessary classes
             labels = instances.labels
             masks = instances.masks
+            keep_indices = []
+            for i, label in enumerate(labels):
+                if label in (0, 2, 7):  # Person, Car, Truck
+                    keep_indices.append(i)
+            keep_indices = torch.Tensor(keep_indices).long()
+            labels = torch.index_select(labels, dim=0, index=keep_indices)
+            masks = torch.index_select(masks, dim=0, index=keep_indices)
+            # MARK: SSML_CUSTOM END
             if isinstance(masks, torch.Tensor):
                 masks = masks.numpy()
             elif isinstance(masks, (PolygonMasks, BitmapMasks)):
